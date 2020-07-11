@@ -1,0 +1,37 @@
+version: 2.1
+
+commands:
+  setup:
+    description: Checkout and install tox
+    steps:
+      - checkout
+      - run: pip install tox-factor
+
+jobs:
+  lint:
+    docker:
+      - image: circleci/python:3.8
+    steps:
+      - setup
+      - run: tox -e lint-ci
+
+  tests:
+    parameters:
+      python3_minor:
+        type: integer
+        description: The x in gives python3.x
+    docker:
+      - image: circleci/python:3.<<parameters.python3_minor>>
+    steps:
+      - checkout
+      - setup
+      - run: tox -f py3<<parameters.python3_minor>>-ci -pauto
+
+workflows:
+  main:
+    jobs:
+      - lint
+      - tests:
+          matrix:
+            parameters:
+              python3_minor: [4, 5, 6, 7, 8]
