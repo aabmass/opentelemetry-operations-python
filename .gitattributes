@@ -1,0 +1,2 @@
+# tells github that proto stubs are generated
+typestubs/src/**/*_pb2*.pyi linguist-generated=true

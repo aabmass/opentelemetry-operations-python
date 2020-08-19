@@ -7,7 +7,7 @@ extension-pkg-whitelist=
 
 # Add files or directories to the blacklist. They should be base names, not
 # paths.
-ignore=CVS,gen,proto
+ignore=CVS,gen,proto,typestubs/src/google
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
@@ -69,7 +69,8 @@ disable=missing-docstring,
       wrong-import-order, # Leave this up to isort
       bad-continuation, # Leave this up to black
       line-too-long, # Leave this up to black
-      exec-used
+      exec-used,
+      no-else-return # Makes "switch" if blocks hard to read
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -113,7 +114,6 @@ max-nested-blocks=5
 # it will be considered as an explicit return statement and no message will be
 # printed.
 never-returning-functions=sys.exit
-
 
 [LOGGING]
 

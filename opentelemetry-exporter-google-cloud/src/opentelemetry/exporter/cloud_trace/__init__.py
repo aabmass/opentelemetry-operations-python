@@ -47,7 +47,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import google.auth
 import opentelemetry.trace as trace_api
 import pkg_resources
-from google.cloud.trace_v2 import TraceServiceClient
+from google.cloud.trace_v2 import (  # type: ignore[attr-defined]
+    TraceServiceClient,
+)
 from google.cloud.trace_v2.proto.trace_pb2 import AttributeValue
 from google.cloud.trace_v2.proto.trace_pb2 import Span as ProtoSpan
 from google.cloud.trace_v2.proto.trace_pb2 import TruncatableString
@@ -220,11 +222,13 @@ def _extract_status(status: trace_api.Status) -> Optional[Status]:
     return Status(**status_dict)
 
 
-def _extract_links(links: Sequence[trace_api.Link]) -> ProtoSpan.Links:
+def _extract_links(
+    links: Sequence[trace_api.Link],
+) -> Optional[ProtoSpan.Links]:
     """Convert span.links"""
     if not links:
         return None
-    extracted_links = []
+    extracted_links = []  # type: List[ProtoSpan.Link]
     dropped_links = 0
     if len(links) > MAX_NUM_LINKS:
         logger.warning(
@@ -243,21 +247,21 @@ def _extract_links(links: Sequence[trace_api.Link]) -> ProtoSpan.Links:
         trace_id = get_hexadecimal_trace_id(link.context.trace_id)
         span_id = get_hexadecimal_span_id(link.context.span_id)
         extracted_links.append(
-            {
-                "trace_id": trace_id,
-                "span_id": span_id,
-                "type": "TYPE_UNSPECIFIED",
-                "attributes": _extract_attributes(
+            ProtoSpan.Link(
+                trace_id=trace_id,
+                span_id=span_id,
+                type=ProtoSpan.Link.Type.TYPE_UNSPECIFIED,
+                attributes=_extract_attributes(
                     link_attributes, MAX_LINK_ATTRS
                 ),
-            }
+            )
         )
     return ProtoSpan.Links(
         link=extracted_links, dropped_links_count=dropped_links
     )
 
 
-def _extract_events(events: Sequence[Event]) -> ProtoSpan.TimeEvents:
+def _extract_events(events: Sequence[Event]) -> Optional[ProtoSpan.TimeEvents]:
     """Convert span.events to dict."""
     if not events:
         return None
@@ -278,17 +282,15 @@ def _extract_events(events: Sequence[Event]) -> ProtoSpan.TimeEvents:
                 MAX_EVENT_ATTRS,
             )
         logs.append(
-            {
-                "time": _get_time_from_ns(event.timestamp),
-                "annotation": {
-                    "description": _get_truncatable_str_object(
-                        event.name, 256
-                    ),
-                    "attributes": _extract_attributes(
+            ProtoSpan.TimeEvent(
+                time=_get_time_from_ns(event.timestamp),
+                annotation=ProtoSpan.TimeEvent.Annotation(
+                    description=_get_truncatable_str_object(event.name, 256),
+                    attributes=_extract_attributes(
                         event.attributes, MAX_EVENT_ATTRS
                     ),
-                },
-            }
+                ),
+            )
         )
     return ProtoSpan.TimeEvents(
         time_event=logs,
@@ -308,7 +310,9 @@ SPAN_KIND_MAPPING = {
 
 
 # pylint: disable=no-member
-def _extract_span_kind(span_kind: trace_api.SpanKind) -> ProtoSpan.SpanKind:
+def _extract_span_kind(
+    span_kind: trace_api.SpanKind,
+) -> "ProtoSpan.SpanKindValue":
     return SPAN_KIND_MAPPING.get(
         span_kind, ProtoSpan.SpanKind.SPAN_KIND_UNSPECIFIED
     )
@@ -363,10 +367,10 @@ def _extract_attributes(
     invalid_value_dropped_count = 0
     for key, value in attrs.items() if attrs else []:
         key = _truncate_str(key, 128)[0]
-        value = _format_attribute_value(value)
+        attribute_value = _format_attribute_value(value)
 
-        if value:
-            attributes_dict[key] = value
+        if attribute_value:
+            attributes_dict[key] = attribute_value
         else:
             invalid_value_dropped_count += 1
     if add_agent_attr:
@@ -385,21 +389,28 @@ def _extract_attributes(
     )
 
 
-def _format_attribute_value(value: types.AttributeValue) -> AttributeValue:
+def _format_attribute_value(
+    value: types.AttributeValue,
+) -> Optional[AttributeValue]:
     if isinstance(value, bool):
-        value_type = "bool_value"
+        return AttributeValue(bool_value=value)
     elif isinstance(value, int):
-        value_type = "int_value"
+        return AttributeValue(int_value=value)
     elif isinstance(value, str):
-        value_type = "string_value"
-        value = _get_truncatable_str_object(value, 256)
+        return AttributeValue(
+            string_value=_get_truncatable_str_object(value, 256)
+        )
     elif isinstance(value, float):
-        value_type = "string_value"
-        value = _get_truncatable_str_object("{:0.4f}".format(value), 256)
+        return AttributeValue(
+            string_value=_get_truncatable_str_object(
+                "{:0.4f}".format(value), 256
+            )
+        )
     elif isinstance(value, collections.Sequence):
-        value_type = "string_value"
-        value = _get_truncatable_str_object(
-            ",".join(str(x) for x in value), 256
+        return AttributeValue(
+            string_value=_get_truncatable_str_object(
+                ",".join(str(x) for x in value), 256
+            )
         )
     else:
         logger.warning(
@@ -409,5 +420,3 @@ def _format_attribute_value(value: types.AttributeValue) -> AttributeValue:
             type(value),
         )
         return None
-
-    return AttributeValue(**{value_type: value})

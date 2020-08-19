@@ -1,3 +1,3 @@
 import setuptools
 
-setuptools.setup()
+setuptools.setup(package_data={"test_common": ["py.typed"]},)

@@ -1,14 +1,20 @@
 import logging
 import random
-from typing import Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import google.auth
 from google.api.distribution_pb2 import Distribution
 from google.api.label_pb2 import LabelDescriptor
-from google.api.metric_pb2 import MetricDescriptor
+from google.api.metric_pb2 import Metric, MetricDescriptor
 from google.api.monitored_resource_pb2 import MonitoredResource
-from google.cloud.monitoring_v3 import MetricServiceClient
-from google.cloud.monitoring_v3.proto.metric_pb2 import TimeSeries
+from google.cloud.monitoring_v3 import (  # type: ignore[attr-defined]
+    MetricServiceClient,
+)
+from google.cloud.monitoring_v3.proto.common_pb2 import (
+    TimeInterval,
+    TypedValue,
+)
+from google.cloud.monitoring_v3.proto.metric_pb2 import Point, TimeSeries
 from opentelemetry.sdk.metrics import UpDownCounter
 from opentelemetry.sdk.metrics.export import (
     MetricRecord,
@@ -76,7 +82,7 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
         else:
             self.project_id = project_id
         self.project_name = self.client.project_path(self.project_id)
-        self._metric_descriptors = {}
+        self._metric_descriptors = {}  # type: Dict[str, MetricDescriptor]
         self._last_updated = {}
         self.unique_identifier = None
         if add_unique_identifier:
@@ -117,7 +123,7 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
             },
         )
 
-    def _batch_write(self, series: TimeSeries) -> None:
+    def _batch_write(self, series: List[TimeSeries]) -> None:
         """ Cloud Monitoring allows writing up to 200 time series at once
 
         :param series: ProtoBuf TimeSeries
@@ -149,25 +155,31 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
         if descriptor_type in self._metric_descriptors:
             return self._metric_descriptors[descriptor_type]
 
-        descriptor = {  # type: ignore[var-annotated] # TODO #56
-            "name": None,
-            "type": descriptor_type,
-            "display_name": instrument.name,
-            "description": instrument.description,
-            "labels": [],
-        }
+        descriptor = MetricDescriptor(
+            name=None,
+            type=descriptor_type,
+            display_name=instrument.name,
+            description=instrument.description,
+            labels=[],
+        )
         for key, value in record.labels:
             if isinstance(value, str):
-                descriptor["labels"].append(  # type: ignore[union-attr] # TODO #56
-                    LabelDescriptor(key=key, value_type="STRING")
+                descriptor.labels.append(
+                    LabelDescriptor(
+                        key=key, value_type=LabelDescriptor.ValueType.STRING
+                    )
                 )
             elif isinstance(value, bool):
-                descriptor["labels"].append(  # type: ignore[union-attr] # TODO #56
-                    LabelDescriptor(key=key, value_type="BOOL")
+                descriptor.labels.append(
+                    LabelDescriptor(
+                        key=key, value_type=LabelDescriptor.ValueType.BOOL
+                    )
                 )
             elif isinstance(value, int):
-                descriptor["labels"].append(  # type: ignore[union-attr] # TODO #56
-                    LabelDescriptor(key=key, value_type="INT64")
+                descriptor.labels.append(
+                    LabelDescriptor(
+                        key=key, value_type=LabelDescriptor.ValueType.INT64
+                    )
                 )
             else:
                 logger.warning(
@@ -176,8 +188,11 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
                 )
 
         if self.unique_identifier:
-            descriptor["labels"].append(  # type: ignore[union-attr] # TODO #56
-                LabelDescriptor(key=UNIQUE_IDENTIFIER_KEY, value_type="STRING")
+            descriptor.labels.append(
+                LabelDescriptor(
+                    key=UNIQUE_IDENTIFIER_KEY,
+                    value_type=LabelDescriptor.ValueType.STRING,
+                )
             )
 
         # SumAggregator is best represented as a cumulative, but it can't be
@@ -186,11 +201,11 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
         if isinstance(record.aggregator, SumAggregator) and not isinstance(
             record.instrument, UpDownCounter
         ):
-            descriptor["metric_kind"] = MetricDescriptor.MetricKind.CUMULATIVE
+            descriptor.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
         elif isinstance(record.aggregator, ValueObserverAggregator):
-            descriptor["metric_kind"] = MetricDescriptor.MetricKind.GAUGE
+            descriptor.metric_kind = MetricDescriptor.MetricKind.GAUGE
         elif isinstance(record.aggregator, HistogramAggregator):
-            descriptor["metric_kind"] = MetricDescriptor.MetricKind.CUMULATIVE
+            descriptor.metric_kind = MetricDescriptor.MetricKind.CUMULATIVE
         else:
             logger.warning(
                 "Unsupported instrument/aggregator combo, types %s and %s, ignoring it",
@@ -200,29 +215,33 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
             return None
 
         if isinstance(record.aggregator, HistogramAggregator):
-            descriptor["value_type"] = MetricDescriptor.ValueType.DISTRIBUTION
+            descriptor.value_type = MetricDescriptor.ValueType.DISTRIBUTION
         elif instrument.value_type == int:
-            descriptor["value_type"] = MetricDescriptor.ValueType.INT64
+            descriptor.value_type = MetricDescriptor.ValueType.INT64
         elif instrument.value_type == float:
-            descriptor["value_type"] = MetricDescriptor.ValueType.DOUBLE
+            descriptor.value_type = MetricDescriptor.ValueType.DOUBLE
 
-        proto_descriptor = MetricDescriptor(**descriptor)
         try:
             descriptor = self.client.create_metric_descriptor(
-                self.project_name, proto_descriptor
+                self.project_name, descriptor
             )
         # pylint: disable=broad-except
         except Exception as ex:
             logger.error(
                 "Failed to create metric descriptor %s",
-                proto_descriptor,
+                descriptor,
                 exc_info=ex,
             )
             return None
         self._metric_descriptors[descriptor_type] = descriptor
         return descriptor
 
-    def _set_start_end_times(self, point_dict, record, metric_descriptor):
+    def _set_start_end_times(
+        self,
+        point: Point,
+        record: MetricRecord,
+        metric_descriptor: MetricDescriptor,
+    ) -> None:
         updated_key = (metric_descriptor.type, record.labels)
         seconds, nanos = divmod(
             record.aggregator.last_update_timestamp, NANOS_PER_SECOND
@@ -238,10 +257,12 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
             ):
                 # The aggregation has not reset since the exporter
                 # has started up, so that is the start time
-                point_dict["interval"]["start_time"] = {
-                    "seconds": self._exporter_start_time_seconds,
-                    "nanos": self._exporter_start_time_nanos,
-                }
+                point.interval.start_time.seconds = (
+                    self._exporter_start_time_seconds
+                )
+                point.interval.start_time.nanos = (
+                    self._exporter_start_time_nanos
+                )
             else:
                 # The aggregation reset the last time it was exported
                 # Add 1ms to guarantee there is no overlap from the previous export
@@ -250,24 +271,18 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
                     self._last_updated[updated_key] + int(1e6),
                     NANOS_PER_SECOND,
                 )
-                point_dict["interval"]["start_time"] = {
-                    "seconds": start_seconds,
-                    "nanos": start_nanos,
-                }
+                point.interval.start_time.seconds = start_seconds
+                point.interval.start_time.nanos = start_nanos
         else:
-            point_dict["interval"]["start_time"] = {
-                "seconds": seconds,
-                "nanos": nanos,
-            }
+            point.interval.start_time.seconds = seconds
+            point.interval.start_time.nanos = nanos
 
         self._last_updated[
             updated_key
         ] = record.aggregator.last_update_timestamp
 
-        point_dict["interval"]["end_time"] = {
-            "seconds": seconds,
-            "nanos": nanos,
-        }
+        point.interval.end_time.seconds = seconds
+        point.interval.end_time.nanos = nanos
 
     def export(
         self, metric_records: Sequence[MetricRecord]
@@ -292,24 +307,22 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
                     UNIQUE_IDENTIFIER_KEY
                 ] = self.unique_identifier
 
-            point_dict = {"interval": {}}  # type: ignore[var-annotated] # TODO #56
-
             if isinstance(record.aggregator, HistogramAggregator):
                 bucket_bounds = list(record.aggregator.checkpoint.keys())
                 bucket_values = list(record.aggregator.checkpoint.values())
 
-                point_dict["value"] = {
-                    "distribution_value": Distribution(
+                point_value = TypedValue(
+                    distribution_value=Distribution(
                         count=sum(bucket_values),
                         bucket_counts=bucket_values,
-                        bucket_options={
-                            "explicit_buckets": {
+                        bucket_options=Distribution.BucketOptions(
+                            explicit_buckets=Distribution.BucketOptions.Explicit(
                                 # don't put in > bucket
-                                "bounds": bucket_bounds[:-1]
-                            }
-                        },
+                                bounds=bucket_bounds[:-1]
+                            )
+                        ),
                     )
-                }
+                )
             else:
                 if isinstance(record.aggregator, SumAggregator):
                     data_point = record.aggregator.checkpoint
@@ -317,10 +330,11 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
                     data_point = record.aggregator.checkpoint.last
 
                 if instrument.value_type == int:
-                    point_dict["value"] = {"int64_value": data_point}
+                    point_value = TypedValue(int64_value=data_point)
                 elif instrument.value_type == float:
-                    point_dict["value"] = {"double_value": data_point}
+                    point_value = TypedValue(double_value=data_point)
 
+            point = Point(interval=TimeInterval(), value=point_value)
             seconds = (
                 record.aggregator.last_update_timestamp // NANOS_PER_SECOND
             )
@@ -333,8 +347,8 @@ class CloudMonitoringMetricsExporter(MetricsExporter):
             if seconds <= last_updated_time_seconds + WRITE_INTERVAL:
                 continue
 
-            self._set_start_end_times(point_dict, record, metric_descriptor)
-            series.points.add(**point_dict)
+            self._set_start_end_times(point, record, metric_descriptor)
+            series.points.append(point)
             all_series.append(series)
         try:
             self._batch_write(all_series)
