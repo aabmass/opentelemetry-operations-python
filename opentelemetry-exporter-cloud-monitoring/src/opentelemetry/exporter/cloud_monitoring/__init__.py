@@ -37,6 +37,8 @@ from opentelemetry.sdk.metrics.export.aggregate import (
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.util import time_ns
 
+TimeSeries(resource="foo")
+
 logger = logging.getLogger(__name__)
 MAX_BATCH_WRITE = 200
 WRITE_INTERVAL = 10

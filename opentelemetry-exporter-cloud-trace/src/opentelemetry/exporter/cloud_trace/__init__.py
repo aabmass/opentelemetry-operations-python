@@ -73,6 +73,8 @@ from opentelemetry.util import types
 
 logger = logging.getLogger(__name__)
 
+trace_pb2.Span()
+
 MAX_NUM_LINKS = 128
 MAX_NUM_EVENTS = 32
 MAX_EVENT_ATTRS = 4
@@ -221,7 +223,7 @@ def _extract_status(status: trace_api.Status) -> Optional[status_pb2.Status]:
         status_proto = status_pb2.Status(code=code_pb2.OK)
     elif status.status_code is StatusCode.ERROR:
         status_proto = status_pb2.Status(
-            code=code_pb2.UNKNOWN, message=status.description
+            code=code_pb2.UNKNOWN, message=status.description or ""
         )
     # future added value
     else:
@@ -236,7 +238,9 @@ def _extract_status(status: trace_api.Status) -> Optional[status_pb2.Status]:
     return status_proto
 
 
-def _extract_links(links: Sequence[trace_api.Link]) -> trace_pb2.Span.Links:
+def _extract_links(
+    links: Sequence[trace_api.Link],
+) -> Optional[trace_pb2.Span.Links]:
     """Convert span.links"""
     if not links:
         return None
@@ -259,21 +263,23 @@ def _extract_links(links: Sequence[trace_api.Link]) -> trace_pb2.Span.Links:
         trace_id = get_hexadecimal_trace_id(link.context.trace_id)
         span_id = get_hexadecimal_span_id(link.context.span_id)
         extracted_links.append(
-            {
-                "trace_id": trace_id,
-                "span_id": span_id,
-                "type": "TYPE_UNSPECIFIED",
-                "attributes": _extract_attributes(
+            trace_pb2.Span.Link(
+                trace_id=trace_id,
+                span_id=span_id,
+                type=trace_pb2.Span.Link.TYPE_UNSPECIFIED,
+                attributes=_extract_attributes(
                     link_attributes, MAX_LINK_ATTRS
                 ),
-            }
+            )
         )
     return trace_pb2.Span.Links(
         link=extracted_links, dropped_links_count=dropped_links
     )
 
 
-def _extract_events(events: Sequence[Event]) -> trace_pb2.Span.TimeEvents:
+def _extract_events(
+    events: Sequence[Event],
+) -> Optional[trace_pb2.Span.TimeEvents]:
     """Convert span.events to dict."""
     if not events:
         return None
@@ -294,17 +300,15 @@ def _extract_events(events: Sequence[Event]) -> trace_pb2.Span.TimeEvents:
                 MAX_EVENT_ATTRS,
             )
         logs.append(
-            {
-                "time": _get_time_from_ns(event.timestamp),
-                "annotation": {
-                    "description": _get_truncatable_str_object(
-                        event.name, 256
-                    ),
-                    "attributes": _extract_attributes(
+            trace_pb2.Span.TimeEvent(
+                time=_get_time_from_ns(event.timestamp),
+                annotation=trace_pb2.Span.TimeEvent.Annotation(
+                    description=_get_truncatable_str_object(event.name, 256),
+                    attributes=_extract_attributes(
                         event.attributes, MAX_EVENT_ATTRS
                     ),
-                },
-            }
+                ),
+            )
         )
     return trace_pb2.Span.TimeEvents(
         time_event=logs,
@@ -326,7 +330,7 @@ SPAN_KIND_MAPPING = {
 # pylint: disable=no-member
 def _extract_span_kind(
     span_kind: trace_api.SpanKind,
-) -> trace_pb2.Span.SpanKind:
+) -> "trace_pb2.Span.SpanKind.V":
     return SPAN_KIND_MAPPING.get(
         span_kind, trace_pb2.Span.SpanKind.SPAN_KIND_UNSPECIFIED
     )
@@ -403,14 +407,14 @@ def _extract_attributes(
         key = _truncate_str(key, 128)[0]
         if key in LABELS_MAPPING:  # pylint: disable=consider-using-get
             key = LABELS_MAPPING[key]
-        value = _format_attribute_value(value)
+        truncated_value = _format_attribute_value(value)
 
-        if value:
-            attributes_dict[key] = value
+        if truncated_value:
+            attributes_dict[key] = truncated_value
         else:
             invalid_value_dropped_count += 1
     if add_agent_attr:
-        attributes_dict["g.co/agent"] = _format_attribute_value(
+        agent_value = _format_attribute_value(
             "opentelemetry-python {}; google-cloud-trace-exporter {}".format(
                 _strip_characters(
                     pkg_resources.get_distribution("opentelemetry-sdk").version
@@ -418,6 +422,8 @@ def _extract_attributes(
                 _strip_characters(__version__),
             )
         )
+        if agent_value:
+            attributes_dict["g.co/agent"] = agent_value
     return trace_pb2.Span.Attributes(
         attribute_map=attributes_dict,
         dropped_attributes_count=attributes_dict.dropped  # type: ignore[attr-defined]
@@ -427,21 +433,26 @@ def _extract_attributes(
 
 def _format_attribute_value(
     value: types.AttributeValue,
-) -> trace_pb2.AttributeValue:
+) -> Optional[trace_pb2.AttributeValue]:
     if isinstance(value, bool):
-        value_type = "bool_value"
+        value_proto = trace_pb2.AttributeValue(bool_value=value)
     elif isinstance(value, int):
-        value_type = "int_value"
+        value_proto = trace_pb2.AttributeValue(int_value=value)
     elif isinstance(value, str):
-        value_type = "string_value"
-        value = _get_truncatable_str_object(value, 256)
+        value_proto = trace_pb2.AttributeValue(
+            string_value=_get_truncatable_str_object(value, 256)
+        )
     elif isinstance(value, float):
-        value_type = "string_value"
-        value = _get_truncatable_str_object("{:0.4f}".format(value), 256)
+        value_proto = trace_pb2.AttributeValue(
+            string_value=_get_truncatable_str_object(
+                "{:0.4f}".format(value), 256
+            )
+        )
     elif isinstance(value, collections.Sequence):
-        value_type = "string_value"
-        value = _get_truncatable_str_object(
-            ",".join(str(x) for x in value), 256
+        value_proto = trace_pb2.AttributeValue(
+            string_value=_get_truncatable_str_object(
+                ",".join(str(x) for x in value), 256
+            )
         )
     else:
         logger.warning(
@@ -452,4 +463,4 @@ def _format_attribute_value(
         )
         return None
 
-    return trace_pb2.AttributeValue(**{value_type: value})
+    return value_proto
