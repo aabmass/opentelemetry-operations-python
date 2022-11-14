@@ -15,6 +15,7 @@
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+import time
 from typing import Callable, Iterable, List, Mapping, Tuple, Type
 
 import grpc
@@ -115,7 +116,10 @@ class FakeHandler(GenericRpcHandler):
 @dataclass
 class GcmFake:
     client: MetricServiceClient
-    get_calls: Callable[[], GcmCalls]
+    handler: FakeHandler
+
+    def get_calls(self) -> GcmCalls:
+        return self.handler.get_calls()
 
 
 @pytest.fixture(name="gcmfake")
@@ -127,7 +131,7 @@ def fixture_gcmfake() -> Iterable[GcmFake]:
 
     try:
         # Run in a single thread to serialize requests
-        with ThreadPoolExecutor(1) as executor:
+        with ThreadPoolExecutor(5) as executor:
             server = grpc.server(executor, handlers=[handler])
             port = server.add_insecure_port("localhost:0")
             server.start()
@@ -136,7 +140,7 @@ def fixture_gcmfake() -> Iterable[GcmFake]:
                     client=MetricServiceClient(
                         transport=MetricServiceGrpcTransport(channel=channel),
                     ),
-                    get_calls=handler.get_calls,
+                    handler=handler,
                 )
     finally:
         if server:

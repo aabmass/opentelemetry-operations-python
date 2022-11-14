@@ -39,6 +39,9 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from opentelemetry.exporter.cloud_monitoring._resource import (
     get_monitored_resource,
 )
+from opentelemetry.exporter.cloud_monitoring._deadline import (
+    Deadline,
+)
 from opentelemetry.sdk.metrics.export import (
     Gauge,
     Histogram,
@@ -108,10 +111,13 @@ class CloudMonitoringMetricsExporter(MetricExporter):
             self._exporter_start_time_nanos,
         ) = divmod(time_ns(), NANOS_PER_SECOND)
 
-    def _batch_write(self, series: List[TimeSeries]) -> None:
+    def _batch_write(
+        self, series: List[TimeSeries], deadline: Deadline
+    ) -> None:
         """Cloud Monitoring allows writing up to 200 time series at once
 
         :param series: ProtoBuf TimeSeries
+        :param deadline_nanos: The nanosecond timestamp deadline for making requests
         :return:
         """
         write_ind = 0
@@ -122,12 +128,15 @@ class CloudMonitoringMetricsExporter(MetricExporter):
                     time_series=series[
                         write_ind : write_ind + MAX_BATCH_WRITE
                     ],
-                )
+                ),
+                timeout=deadline.timeout_seconds(),
             )
             write_ind += MAX_BATCH_WRITE
 
     def _get_metric_descriptor(
-        self, metric: Metric
+        self,
+        metric: Metric,
+        deadline: Deadline,
     ) -> Optional[MetricDescriptor]:
         """We can map Metric to MetricDescriptor using Metric.name or
         MetricDescriptor.type. We create the MetricDescriptor if it doesn't
@@ -204,7 +213,8 @@ class CloudMonitoringMetricsExporter(MetricExporter):
             response_descriptor = self.client.create_metric_descriptor(
                 CreateMetricDescriptorRequest(
                     name=self.project_name, metric_descriptor=descriptor
-                )
+                ),
+                timeout=deadline.timeout_seconds(),
             )
         # pylint: disable=broad-except
         except Exception as ex:
@@ -213,7 +223,8 @@ class CloudMonitoringMetricsExporter(MetricExporter):
                 descriptor,
                 exc_info=ex,
             )
-            return None
+            raise ex
+            # return None
         self._metric_descriptors[descriptor_type] = response_descriptor
         return descriptor
 
@@ -267,10 +278,10 @@ class CloudMonitoringMetricsExporter(MetricExporter):
     def export(
         self,
         metrics_data: MetricsData,
-        # TODO(aabmass): pass timeout to api calls
         timeout_millis: float = 10_000,
         **kwargs,
     ) -> MetricExportResult:
+        deadline = Deadline(timeout_millis)
         all_series = []
 
         for resource_metric in metrics_data.resource_metrics:
@@ -290,7 +301,7 @@ class CloudMonitoringMetricsExporter(MetricExporter):
                         ),
                     )
 
-                    descriptor = self._get_metric_descriptor(metric)
+                    descriptor = self._get_metric_descriptor(metric, deadline)
                     if not descriptor:
                         continue
 
@@ -321,7 +332,7 @@ class CloudMonitoringMetricsExporter(MetricExporter):
                         all_series.append(series)
 
         try:
-            self._batch_write(all_series)
+            self._batch_write(all_series, deadline)
         # pylint: disable=broad-except
         except Exception as ex:
             logger.error(

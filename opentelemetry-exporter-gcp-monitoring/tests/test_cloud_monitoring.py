@@ -242,3 +242,16 @@ def test_with_resource(
     counter.add(12, LABELS)
     meter_provider.force_flush()
     assert gcmfake.get_calls() == snapshot_gcmcalls
+
+
+def test_exceed_timeout(
+    gcmfake_meter_provider: GcmFakeMeterProvider,
+    gcmfake: GcmFake,
+) -> None:
+    meter_provider = gcmfake_meter_provider()
+    counter = meter_provider.get_meter(__name__).create_counter(
+        "mycounter", description="foo", unit="{myunit}"
+    )
+    counter.add(12, LABELS)
+    meter_provider.force_flush(timeout_millis=10)
+    assert len(gcmfake.get_calls())
