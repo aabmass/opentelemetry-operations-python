@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "test-common"
+version = "0.0.1.dev0"
+description = "Test utilities used across packages in this repo"
+license = ""
+classifiers = [
+    # Prevents upload, see https://pypi.org/classifiers/
+    "Private :: Do Not Upload",
+]
+dependencies = []
+
+[tool.hatch.build.targets.sdist]
+include = ["/src"]
