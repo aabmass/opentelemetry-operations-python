@@ -49,3 +49,71 @@ include = ["/src", "/tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/opentelemetry"]
+
+[tool.hatch.env]
+requires = ["hatch-pip-compile"]
+
+[tool.hatch.envs.default]
+type = "pip-compile"
+pip-compile-resolver = "uv"
+installer = "uv"
+dependencies = [
+    "opentelemetry-resourcedetector-gcp @ {root:parent:uri}/opentelemetry-resourcedetector-gcp",
+]
+
+# Configure testing dependencies
+[tool.hatch.envs.hatch-test]
+type = "pip-compile"
+pip-compile-resolver = "uv"
+installer = "uv"
+dependencies = [
+    "syrupy==3.0.4",
+    "pytest==7.4.4",
+    "opentelemetry-api==1.20.0",
+    "opentelemetry-sdk==1.20.0",
+    "opentelemetry-resourcedetector-gcp @ {root:parent:uri}/opentelemetry-resourcedetector-gcp",
+]
+[[tool.hatch.envs.hatch-test.matrix]]
+python = ["3.11", "3.10", "3.9", "3.8"]
+
+# Configure fix/lint to use black, isort, flake8, pylint
+[tool.hatch.envs.hatch-static-analysis]
+type = "pip-compile"
+pip-compile-resolver = "uv"
+installer = "uv"
+python = "3.10"
+dependencies = [
+    "black==22.3.0",
+    "flake8==3.9.2",
+    "isort==5.8.0",
+    "mypy-extensions==0.4.3",
+    "mypy==0.982",
+    "pylint==2.8.3",
+    # TODO: remove once pylint is upgraded, needed for pkg_resources
+    "setuptools==69.5.1",
+
+    # Coped from hatch-test environment
+    # unfortunately need to copy all the deps as it doesn't install the package
+    "syrupy==3.0.4",
+    "pytest==7.4.4",
+    "opentelemetry-api==1.20.0",
+    "opentelemetry-sdk==1.20.0",
+    "opentelemetry-resourcedetector-gcp @ {root:parent:uri}/opentelemetry-resourcedetector-gcp",
+    "opentelemetry-exporter-gcp-monitoring @ {root:uri}",
+]
+
+[tool.hatch.envs.hatch-static-analysis.scripts]
+format-check = [
+    "black {args:.} --config {root:parent}/pyproject.toml --diff --check",
+    "isort {args:.} --diff --check-only",
+]
+format-fix = [
+    "isort {args:.}",
+    "black {args:.} --config {root:parent}/pyproject.toml ",
+]
+lint-check = [
+    "flake8 --config {root:parent}/.flake8 .",
+    "pylint --rcfile {root:parent}/.pylintrc src/ tests/",
+]
+lint-fix = "lint-check"
+lint-mypy = "mypy src/ --pretty --show-error-codes {args}"

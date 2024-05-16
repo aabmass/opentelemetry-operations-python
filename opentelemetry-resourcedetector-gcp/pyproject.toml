@@ -43,3 +43,45 @@ include = ["/src", "/tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/opentelemetry"]
+
+[tool.hatch.envs.hatch-test]
+dependencies = [
+    "syrupy==3.0.4",
+    "pytest==7.4.4",
+    "opentelemetry-api==1.20.0",
+    "opentelemetry-sdk==1.20.0",
+]
+
+# Configure fix/lint to use black, isort, flake8, pylint
+[tool.hatch.envs.hatch-static-analysis]
+python = "3.10"
+dependencies = [
+    "black==22.3.0",
+    "flake8==3.9.2",
+    "isort==5.8.0",
+    "mypy-extensions==0.4.3",
+    "mypy==0.982",
+    "types-requests==2.28.11.2",
+    "pylint==2.8.3",
+    # TODO: remove once pylint is upgraded, needed for pkg_resources
+    "setuptools==69.5.1",
+
+    # Needed for pylint static analysis of tests
+    "pytest==7.4.4",
+    "syrupy==3.0.4",
+]
+[tool.hatch.envs.hatch-static-analysis.scripts]
+format-check = [
+    "black {args:.} --config {root:parent}/pyproject.toml --diff --check",
+    "isort {args:.} --diff --check-only",
+]
+format-fix = [
+    "isort {args:.}",
+    "black {args:.} --config {root:parent}/pyproject.toml ",
+]
+lint-check = [
+    "flake8 --config {root:parent}/.flake8 .",
+    "pylint --rcfile {root:parent}/.pylintrc src/ tests/",
+]
+lint-fix = "lint-check"
+lint-mypy = "mypy src/ --pretty --show-error-codes {args}"
