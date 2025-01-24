@@ -105,9 +105,7 @@ class CloudLoggingExporter(LogExporter):
             project_id = self.project_id
             if attributes.get(PROJECT_ID_ATTRIBUTE_KEY):
                 project_id = str(attributes.get(PROJECT_ID_ATTRIBUTE_KEY))
-            log_name = self.default_log_name
-            if attributes.get(LOG_NAME_ATTRIBUTE_KEY):
-                log_name = str(attributes.get(LOG_NAME_ATTRIBUTE_KEY))
+            log_name = "otel_python_inprocess_log_name_temp"
             if not log_name:
                 logging.warning(
                     "No log name provided, cannot write log to Cloud Logging.  Set the 'default_log_name' option, or add the 'gcp.log_name' attribute to set a log name."
