@@ -24,11 +24,13 @@ following roles to run the example:
 ## Running the example
 
 The sample can easily be run in Cloud Shell. You can also use
-[Application Default Credentials][ADC] locally. Clone and set environment variables:
+[Application Default Credentials][ADC] locally. Clone:
 ```sh
 git clone https://github.com/GoogleCloudPlatform/opentelemetry-operations-python.git
 cd opentelemetry-operations-python/samples/adk-sql-agent
+```
 
+<!-- 
 # Capture GenAI prompts and responses
 export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true
 # Capture application logs automatically
@@ -41,13 +43,24 @@ python -m venv venv/
 source venv/bin/activate
 pip install -r requirements.txt
 python main.py
-```
+``` -->
 
-Alternatively if you have [`uv`](https://docs.astral.sh/uv/) installed:
+Update the `GOOGLE_CLOUD_PROJECT` environment variable in [`main.env`](./main.env) or set it in your shell.
+
+Use [`uv`](https://docs.astral.sh/uv/) to run:
 
 ```sh
-uv run main.py
+uv run --env-file main.env main.py
 ```
+
+## Note on Semantic Conventions
+
+This sample uses
+[opentelemetry-instrumentation-google-genai](https://github.com/open-telemetry/opentelemetry-python-contrib/tree/main/instrumentation-genai/opentelemetry-instrumentation-google-genai)
+to get spans following OpenTelemetry semantic conventions for inference calls to VertexAI. This
+powers Cloud Trace's GenAI experience. ADK emits it's own `call_llm` spans which do not
+currently follow OpenTelemetry semantic conventions
+https://github.com/google/adk-python/issues/356.
 
 ## Viewing the results
 

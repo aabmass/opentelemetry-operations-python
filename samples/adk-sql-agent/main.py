@@ -27,10 +27,9 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
 )
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 from opentelemetry.instrumentation.google_genai import GoogleGenAiSdkInstrumentor
-from opentelemetry.instrumentation.vertexai import VertexAIInstrumentor
 from opentelemetry.sdk._events import EventLoggerProvider
 from opentelemetry.sdk._logs import LoggerProvider
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, ConsoleLogExporter
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -84,16 +83,17 @@ def setup_opentelemetry() -> None:
         )
     )
     trace.set_tracer_provider(tracer_provider)
-    # with tracer_provider.get_tracer(__name__).start_as_current_span("foo") as span:
-    #     print(f"Created {span=} ")
 
     logger_provider = LoggerProvider(resource=resource)
-    # logger_provider.add_log_record_processor(
-    #     BatchLogRecordProcessor(CloudLoggingExporter())
-    # )
     logger_provider.add_log_record_processor(
-        BatchLogRecordProcessor(ConsoleLogExporter(out=open("./logs.jsonl", "w+")))
+        BatchLogRecordProcessor(CloudLoggingExporter())
     )
+
+    # Uncomment to output logs to a file locally too
+    # logger_provider.add_log_record_processor(
+    #     BatchLogRecordProcessor(ConsoleLogExporter(out=open("./logs.jsonl", "w+")))
+    # )
+
     logs.set_logger_provider(logger_provider)
 
     event_logger_provider = EventLoggerProvider(logger_provider)
@@ -104,8 +104,9 @@ def setup_opentelemetry() -> None:
     metrics.set_meter_provider(meter_provider)
 
     # Load instrumentors
+    # TODO: if this is too chatty because of ADK's use of SQL for session management, the
+    # connection used in tools.py can be instrumented to cut ADK spans out
     SQLite3Instrumentor().instrument()
-    VertexAIInstrumentor().instrument()
     GoogleGenAiSdkInstrumentor().instrument()
 
 
