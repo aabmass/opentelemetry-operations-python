@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM ghcr.io/astral-sh/uv:bookworm-slim
+        ENV UV_LINK_MODE=copy
+        WORKDIR /app
+        COPY main.py .
+
+        CMD ["uv", "run", "--script", "--locked", "main.py"]
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
+      - OTEL_SERVICE_NAME=agent
+      - LANGSMITH_TRACING="true"
+      - LANGSMITH_OTEL_ENABLED="true"
+      - LANGSMITH_OTEL_ONLY="true"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/jaeger:2.8.0
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "16686:16686" # Jaeger UI
