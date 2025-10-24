@@ -25,10 +25,14 @@ tox -e py310-ci-test-cloudlogging -- --snapshot-update
 
 Be sure to review the changes.
 """
+import json
+import logging
 import re
 from io import StringIO
+import sys
 from textwrap import dedent
-from typing import Mapping, Union
+from typing import Iterable, Mapping, Union
+from unittest.mock import Mock, patch
 
 import pytest
 from fixtures.cloud_logging_fake import (
@@ -36,6 +40,8 @@ from fixtures.cloud_logging_fake import (
     ExportAndAssertSnapshot,
 )
 from google.auth.credentials import AnonymousCredentials
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
 from google.cloud.logging_v2.services.logging_service_v2 import (
     LoggingServiceV2Client,
 )
@@ -44,7 +50,7 @@ from opentelemetry.exporter.cloud_logging import (
     CloudLoggingExporter,
     is_log_id_valid,
 )
-from opentelemetry.sdk._logs import LogData
+from opentelemetry.sdk._logs import LogData, LoggingHandler
 from opentelemetry.sdk._logs._internal import LogRecord
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.util.instrumentation import InstrumentationScope
@@ -423,3 +429,43 @@ def test_structured_json_lines():
         {"logging.googleapis.com/labels":{"event.name":"foo","key":"4"},"logging.googleapis.com/spanId":"0000000000000016","logging.googleapis.com/trace":"projects/fakeproject/traces/00000000000000000000000000000019","logging.googleapis.com/trace_sampled":false,"message":"hello","severity":"ERROR","time":"2025-01-15T21:25:10.997977393Z"}
         """
     ), "Each `LogData` should be on its own line"
+
+
+@pytest.fixture(name="root_logger_with_otelhandler")
+def fixture_root_logger_with_otelhandler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterable[logging.Logger]:
+    provider = LoggerProvider()
+    provider.add_log_record_processor(
+        SimpleLogRecordProcessor(
+            CloudLoggingExporter(
+                project_id=PROJECT_ID, structured_json_file=StringIO()
+            )
+        )
+    )
+    handler = LoggingHandler(logger_provider=provider)
+
+    root = logging.getLogger()
+    monkeypatch.setattr(root, "handlers", [handler])
+
+    yield root
+
+
+def test_structured_json_with_otelhandler_no_recursion(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    root_logger_with_otelhandler: logging.Logger,
+) -> None:
+    """When using OTel's LoggingHandler on the root logger and SimpleLogRecordProcessor,
+    recursion should not be possible"""
+
+    # Make json encoding raise
+    dumps_mock = Mock()
+    monkeypatch.setattr(json, "dumps", dumps_mock)
+    dumps_mock.side_effect = TypeError("json couldn't be serialized")
+
+    # Should not raise
+    root_logger_with_otelhandler.warning("something to log out")
+
+    # Instead exception is logged
+    assert "Exception while exporting logs" in caplog.records[0].message
