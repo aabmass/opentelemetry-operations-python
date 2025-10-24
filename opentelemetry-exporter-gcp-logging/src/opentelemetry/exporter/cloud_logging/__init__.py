@@ -464,3 +464,16 @@ class CloudLoggingExporter(LogExporter):
 
     def shutdown(self):
         pass
+
+
+"""
+logging.info()...
+    OTel LoggingHandler.emit()
+    |    OTel Logger.emit()
+    |        OTel SimpleLogRecordProcessor.on_emit()
+    |            OTel Exporter.emit()
+    |                raise FooError()
+    |        <-------|                       
+    |        logger.exception()
+    |--------|
+"""
