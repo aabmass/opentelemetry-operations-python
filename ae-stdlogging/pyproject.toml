@@ -1,0 +1,55 @@
+[project]
+name = "ae-stdlogging"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Your Name", email = "your@email.com" }]
+dependencies = [
+    "google-adk>=1.15.0,<2.0.0",
+    "opentelemetry-exporter-gcp-logging>=1.11.0a0,<2.0.0",
+    "google-cloud-logging>=3.12.0,<4.0.0",
+    "google-cloud-aiplatform[adk,agent-engines]>=1.118.0,<2.0.0",
+    "protobuf>=6.31.1,<7.0.0",
+]
+
+requires-python = ">=3.10,<3.13"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-asyncio>=0.23.8,<1.0.0",
+    "nest-asyncio>=1.6.0,<2.0.0",
+    "locust>=2.42.1",
+    "httpx",
+    "opentelemetry-sdk>=1.37",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-distro",
+    "opentelemetry-instrumentation",
+    "opentelemetry-exporter-credential-provider-gcp",
+    "opentelemetry-instrumentation-httpx",
+    "opentelemetry-instrumentation-requests",
+    "opentelemetry-exporter-gcp-logging",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["app", "frontend"]
+
+[tool.uv.sources]
+# opentelemetry-instrumentation = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", subdirectory = "opentelemetry-instrumentation", branch = "main" }
+# opentelemetry-instrumentation-google-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", subdirectory = "instrumentation-genai/opentelemetry-instrumentation-google-genai", branch = "main" }
+# opentelemetry-util-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", subdirectory = "util/opentelemetry-util-genai", branch = "main" }
+# opentelemetry-instrumentation-sqlite3 = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", subdirectory = "instrumentation/opentelemetry-instrumentation-sqlite3", branch = "main" }
+# opentelemetry-api = { git = "https://github.com/open-telemetry/opentelemetry-python", branch = "main", subdirectory = "opentelemetry-api" }
+# opentelemetry-sdk = { git = "https://github.com/open-telemetry/opentelemetry-python", branch = "main", subdirectory = "opentelemetry-sdk" }
+# opentelemetry-semantic-conventions = { git = "https://github.com/open-telemetry/opentelemetry-python", branch = "main", subdirectory = "opentelemetry-semantic-conventions" }
+# fsspec = { git = "https://github.com/fsspec/filesystem_spec.git" }
+# gcsfs = { git = "https://github.com/aabmass/gcsfs.git", branch = "remove-conflicts" }
+
+
+# opentelemetry-util-genai = { git = "https://github.com/open-telemetry/opentelemetry-python-contrib.git", subdirectory = "util/opentelemetry-util-genai", branch = "main" }
+google-cloud-aiplatform = { git = "https://github.com/aabmass/python-aiplatform.git", branch = "6085-uv" }
+# opentelemetry-exporter-gcp-logging = { git = "https://github.com/GoogleCloudPlatform/opentelemetry-operations-python.git", subdirectory = "opentelemetry-exporter-gcp-logging" }
