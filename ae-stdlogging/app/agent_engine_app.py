@@ -45,6 +45,9 @@ from app.utils.gcs import create_bucket_if_not_exists
 # from app.utils.typing import Feedback
 
 
+DEFAULT_LOCATION = "us-central1"
+
+
 class MyAdkApp(AdkApp):
     def set_up(self) -> None:
         super().set_up()
@@ -117,8 +120,8 @@ def cli():
 )
 @click.option(
     "--location",
-    default="europe-west3",
-    help="GCP region (defaults to europe-west3)",
+    default=DEFAULT_LOCATION,
+    help=f"GCP region (defaults to {DEFAULT_LOCATION})",
 )
 @asyncio_run
 async def invoke(message: str, agent_name: str, project: str, location: str):
@@ -157,8 +160,8 @@ async def invoke(message: str, agent_name: str, project: str, location: str):
 )
 @click.option(
     "--location",
-    default="europe-west3",
-    help="GCP region (defaults to europe-west3)",
+    default=DEFAULT_LOCATION,
+    help=f"GCP region (defaults to {DEFAULT_LOCATION})",
 )
 @click.option(
     "--agent-name",
