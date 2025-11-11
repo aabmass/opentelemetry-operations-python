@@ -16,6 +16,7 @@
 import logging
 import os
 from typing import Any
+from unittest.mock import patch
 
 import click
 import google.auth
@@ -44,37 +45,52 @@ from app.utils.gcs import create_bucket_if_not_exists
 # from app.utils.typing import Feedback
 
 
-# class AgentEngineApp(AdkApp):
-#     def set_up(self) -> None:
-#         """Set up logging and tracing for the agent engine app."""
-#         import logging
+class MyAdkApp(AdkApp):
+    def set_up(self) -> None:
+        super().set_up()
 
-#         super().set_up()
-#         logging.basicConfig(level=logging.INFO)
-#         logging_client = google_cloud_logging.Client()
-#         self.logger = logging_client.logger(__name__)
-#         provider = TracerProvider()
-#         processor = export.BatchSpanProcessor(
-#             CloudTraceLoggingSpanExporter(
-#                 project_id=os.environ.get("GOOGLE_CLOUD_PROJECT")
-#             )
-#         )
-#         provider.add_span_processor(processor)
-#         trace.set_tracer_provider(provider)
+        import google.auth
 
-#     def register_feedback(self, feedback: dict[str, Any]) -> None:
-#         """Collect and log feedback."""
-#         feedback_obj = Feedback.model_validate(feedback)
-#         self.logger.log_struct(feedback_obj.model_dump(), severity="INFO")
+        logging.info("Environ before = %s", os.environ)
 
-#     def register_operations(self) -> dict[str, list[str]]:
-#         """Registers the operations of the Agent.
+        # Profiler fails with quota project for some reason. I don't need quota project since I
+        # updated to use a service account which is owned by my project
+        with patch.dict(os.environ, {"GOOGLE_CLOUD_QUOTA_PROJECT": ""}):
+            logging.info("Environ after patch = %s", os.environ)
+            try:
+                credentials, project_id = google.auth.default()
 
-#         Extends the base operations to include feedback registration functionality.
-#         """
-#         operations = super().register_operations()
-#         operations[""] = operations.get("", []) + ["register_feedback"]
-#         return operations
+                logging.info(
+                    "Profiler using creds = %s\n%s", credentials, vars(credentials)
+                )
+                logging.info("Profiler using project_id = %s", project_id)
+
+                if hasattr(credentials, "service_account_email"):
+                    service_account_email = credentials.service_account_email
+                    logging.info(
+                        "The current service account email is: %s",
+                        service_account_email,
+                    )
+                else:
+                    logging.warning(
+                        "No service account credential found. The application might be using user credentials."
+                    )
+
+            except Exception as e:
+                print(f"An error occurred: {e}")
+
+            import googlecloudprofiler
+
+            googlecloudprofiler.start(
+                service="adk-agent-engine",
+                service_version="0.1.0",
+                project_id=project_id,
+                # verbose is the logging level. 0-error, 1-warning, 2-info,
+                # 3-debug. It defaults to 0 (error) if not set.
+                verbose=3,
+                # project_id must be set if not running on GCP.
+                # project_id='my-project-id',
+            )
 
 
 @click.group()
@@ -167,7 +183,7 @@ async def invoke(message: str, agent_name: str, project: str, location: str):
 )
 @click.option(
     "--service-account",
-    default=None,
+    default="my-ae-serviceaccount@otel-starter-project.iam.gserviceaccount.com",
     help="Service account email to use for the agent engine",
 )
 @click.option(
@@ -233,7 +249,7 @@ def deploy_agent_engine_app(
     # Read requirements
     with open(requirements_file) as f:
         requirements = f.read().strip().split("\n")
-    agent_engine = AdkApp(
+    agent_engine = MyAdkApp(
         agent=root_agent,
         artifact_service_builder=lambda: GcsArtifactService(
             bucket_name=artifacts_bucket_name
