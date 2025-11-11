@@ -23,6 +23,7 @@ dependencies = [
     { name = "google-adk" },
     { name = "google-cloud-aiplatform", extra = ["adk", "agent-engines"] },
     { name = "google-cloud-logging" },
+    { name = "google-cloud-profiler" },
     { name = "opentelemetry-exporter-gcp-logging" },
     { name = "protobuf" },
 ]
@@ -49,6 +50,7 @@ requires-dist = [
     { name = "google-adk", specifier = ">=1.15.0,<2.0.0" },
     { name = "google-cloud-aiplatform", extras = ["adk", "agent-engines"], git = "https://github.com/aabmass/python-aiplatform.git?branch=6085-uv" },
     { name = "google-cloud-logging", specifier = ">=3.12.0,<4.0.0" },
+    { name = "google-cloud-profiler", specifier = ">=4.1.0" },
     { name = "opentelemetry-exporter-gcp-logging", specifier = ">=1.11.0a0,<2.0.0" },
     { name = "protobuf", specifier = ">=6.31.1,<7.0.0" },
 ]
@@ -868,6 +870,19 @@ sdist = { url = "https://files.pythonhosted.org/packages/bc/b8/7f68a7738cbfef610
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/d3/02dcf5376cb4b47b9c06eba36d80700d5b0a1510f3fcd47d3abbe4b0f0a3/google_cloud_monitoring-2.28.0-py3-none-any.whl", hash = "sha256:64f4c57cc465dd51cceffe559f0ec6fa9f96aa6d82790cd8d3af6d5cc3795160", size = 384670, upload-time = "2025-10-14T15:42:41.911Z" },
 ]
+
+[[package]]
+name = "google-cloud-profiler"
+version = "4.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-python-client" },
+    { name = "google-auth" },
+    { name = "google-auth-httplib2" },
+    { name = "protobuf" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/be/fa9b4915315c764a38b42aac1a6355bb65deb5cb8a97c1a01c0de425780d/google-cloud-profiler-4.1.0.tar.gz", hash = "sha256:2d90f9c6d4c075ad6d43752ae39424c3d0bad63e6549a2c761881f9a235067ae", size = 32305, upload-time = "2023-08-16T16:57:56.332Z" }
 
 [[package]]
 name = "google-cloud-resource-manager"
