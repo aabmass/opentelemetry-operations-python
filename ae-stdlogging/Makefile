@@ -43,7 +43,7 @@ loadtest:
 	uv run --env-file=loadtest.env \
 	locust -f tests/load_test/load_test.py \
 	--headless \
-	-t 120s -u 20 -r 2 \
+	-t 20m -u 3 -r 2 \
 	--csv=tests/load_test/.results/results \
 	--html=tests/load_test/.results/report.html
 
